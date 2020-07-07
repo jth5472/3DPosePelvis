@@ -58,6 +58,15 @@ detectron_to_openpose = {
 }
 
 def convert_detectron_to_open_pose(detectron_keypoints):
+	"""
+		Converts array indexes ID's from detectron to openpose to prepare for 3d pose lifting
+
+		Parameters:
+			detectron_keypoints (np.array): shape => (joint ID, dim) (3rd dim is a score not Z)
+		Returns:
+			(np.array): transformed 2d_pose into openpose format
+
+	"""
 	detectron_keypoints = detectron_keypoints[0] if len(np.shape(detectron_keypoints)) == 3 else detectron_keypoints
 	res = [None for _ in range(14)]
 	for i in range(14):
@@ -70,6 +79,15 @@ def convert_detectron_to_open_pose(detectron_keypoints):
 
 
 class Processor:
+	"""
+		Holds the options and pose processing methods for videos.
+
+		Fields:
+			w: height of video
+			h: width of video
+			pose_estimator: pose estimator to use when processing
+			poseLifting: 3d pose lifting model to use when processing
+	"""
 	def __init__(self, args):
 		self.w, self.h = model_wh(args.resize)
 
@@ -80,6 +98,20 @@ class Processor:
 		self.poseLifting = Prob3dPose('lifting/models/prob_model_params.mat')
 
 	def process_video(self,video_file,target_filename,one_person = True):
+
+		"""
+			Gets relevant 3d_poses from raw video via openpose and output a pose visualization video.
+
+			Parameters:
+				video_file (str): Video filename of target video
+				target_filename (str): location of where to store processed video
+				one_person (bool): If true only detects the pose of the largest person on the first frame of the video.
+					If false will get all poses of people in video.
+
+			Returns:
+				(list) 3d_pose or poses from people in specificed video
+
+		"""
 		cap = cv2.VideoCapture(video_file)
 		fourcc = cv2.VideoWriter_fourcc(*'XVID')
 		width = cap.get(3)
@@ -94,6 +126,7 @@ class Processor:
 			ret,frame = cap.read()
 			if ret:
 			    t = time.time()
+
 			    humans = self.pose_estimator.inference(frame,resize_to_default=(self.w > 0 and self.h > 0), upsample_size = 4.0)
 			    if one_person:
 				    closest_person_index,midpoint = Processor.grab_closest_human(humans,frame,last_closest = midpoint)
@@ -130,6 +163,18 @@ class Processor:
 
 
 	def grab_keypoints(self,humans,image_dimensions,image):
+		"""
+			Returns 3d_poses from 2d_poses stored in human objects and draws centered pose onto specified frame.
+
+			Parameters:
+				humans (list: list of Human objects that contain 2d_pose information
+				image_dimensions (tuple): (w,h) of frame
+				image (np.array): The relevant image that the humans object was extracted from
+
+			Returns:
+				(list): 3d_poses of humans
+
+		"""
 		
 		image_h, image_w = image_dimensions
 		pose_2d_mpiis = []
@@ -155,6 +200,16 @@ class Processor:
 
 	@staticmethod
 	def draw_poses(humans, frame):
+		"""
+			Draws human poses onto frame from openpose data.
+
+			Parameters:
+				humans (list): List of Human objects that contain 2d_pose information
+				frame (np.array): Image to draw poses on
+			Returns:
+				None
+
+		"""
 		image_h, image_w = frame.shape[:2]
 		centers = {}
 		for human in humans:
@@ -174,6 +229,19 @@ class Processor:
 				cv2.line(frame, centers[pair[0]], centers[pair[1]], common.CocoColors[pair_order], 3)
 
 	def draw_detectron_poses(human,frame):
+		"""	
+
+		Draws human poses onto frame from detectron data.
+
+		Parameters:
+			human (np.array): shape => (joint ID, dim) , np array of 2d pose
+			frame: Image to draw human poses on
+
+		Returns:
+			None
+
+
+		"""
 		image_h, image_w = frame.shape[:2]
 		for i,keypoint in enumerate(human):
 			#center = (int(keypoint[0] * image_w + 0.5), int(keypoint[1] * image_h + 0.5))
@@ -184,6 +252,21 @@ class Processor:
 
 	@staticmethod
 	def grab_closest_human(humans,frame,last_closest = None):
+
+		"""
+
+			Gets the index and pose thats closest to the point specified. If the point specified is None, it will return the largest.
+
+			Parameters:
+				humans (list): list of human objects containing 2d_poses
+				frame: Relevant image that humans are extracted from
+				last_closest: reference point to determine closest pose
+
+			Returns:
+				(int): index in humans where the closest pose occurs
+				(np.array): closest pose
+
+		"""
 
 
 		thresh = 90
@@ -218,6 +301,17 @@ class Processor:
 
 	@staticmethod
 	def combine_videos(video_files,target_filename):
+		"""
+			Combines video files and stores into output path.
+
+			Parameters:
+				video_files (list): List of video file paths to combine
+				target_filename (str): Location to store combined video.
+
+			Returns:
+				None
+
+		"""
 
 		if not video_files[0]:
 			raise Exception("Argument video_files is empty.")
@@ -253,6 +347,19 @@ class Processor:
 
 
 	def visualize_detectron_keypoints(self,video_file,target_filename,detectron_keypoints):
+
+		"""
+			Stores a video with 2d pose overlayed on top of original video and returns 3d_poses from detectron 2d keypoints.
+
+			Parameters:
+				video_file (str): filename of target video
+				target_filename (str): Location of where to store overlayed video
+				detectron_keypoints (np.array): 2d keypoints from detectron2
+
+			Returns:
+				(np.array): 3d poses of shape => (time,joint ID,dim)
+
+		"""
 		detectron_keypoints = np.array([convert_detectron_to_open_pose(x) for x in detectron_keypoints])
 		cap = cv2.VideoCapture(video_file)
 		fourcc = cv2.VideoWriter_fourcc(*'XVID')
@@ -290,6 +397,18 @@ class Processor:
 
 
 	def pose_3d_from_detectron_npy(self,filename):
+		"""
+		Note: Same as visualize_detectron_keypoints() but without the visualization
+		returns 3d_poses from detectron 2d keypoints.
+
+		Parameters:
+			filename (str): npy file location of 2d keypoints from detectron2
+
+		Returns:
+			(np.array): 3d poses of shape => (time,joint ID,dim)
+
+		
+		"""
 		keypoints = np.load(filename,allow_pickle = True)[0]['keypoints']
 		keypoints = np.array([convert_detectron_to_open_pose(x) for x in keypoints])
 
@@ -301,9 +420,9 @@ class Processor:
 				pose_3d = self.poseLifting.compute_3d(transformed_pose2d,weights)
 				poses.append(pose_3d[0])
 			except:
+				#if pose_3d fails fill with naive interpolation of last point
 				if len(poses):
 					poses.append(poses[-1])
-
 
 		return poses
 
@@ -317,12 +436,25 @@ class Processor:
 
 
 class Vicon_Processor:
+	"""
+		Handles Processing 3d_pose information from both vicon data and pose estimation outputs.
+	"""
 
 	def __init__():
 		pass
 
 	@staticmethod
 	def pose_graph_animation(pose_data,filename):
+		"""
+			Returns a gif of 3d_pose plot over time.
+
+			Parameters:
+				pose_data (list): 3d_pose over time
+				filename (str): filename of target path to store gif
+			Returns:
+				None
+		
+		"""
 
 		def get_image_from_pose(pose_3d):
 			fig = plot_pose(pose_3d)
@@ -337,6 +469,20 @@ class Vicon_Processor:
 	@staticmethod
 	def compare_vicon_and_pose_signals(pose_data,vicon_data,center_marker,target_marker):
 
+
+		"""
+			Plots a comparison of specified pose estimation and vicon data.
+
+			Parameters:
+				pose_data (list): 3d_poses from a subject using pose estimation
+				vicon_data (list): 3d_poses from a subject using sensors
+				center_marker (int): ID of the marker to center offset the target_marker from
+				target_marker (int): ID of the target marker of joint t of comparison
+			Returns:
+				None
+
+
+		"""
 
 		vicon_data = Vicon_Processor.__format_vicon_data(vicon_data)
 		print(np.shape(vicon_data))
@@ -369,6 +515,15 @@ class Vicon_Processor:
 
 	@staticmethod
 	def __format_vicon_data(vicon_data):
+		"""
+			Formats data from vicon to fit 3d_pose output format.
+			
+			Parameters:
+				vicon_data (list): 3d pose from vicon data.
+			Returns:
+				(np.array): transformed data to fit pose estimation output.
+
+		"""
 		try:
 			vicon_data = np.asarray(vicon_data,dtype = np.float64)
 		except:
@@ -379,6 +534,16 @@ class Vicon_Processor:
 
 	@staticmethod
 	def load_npy_files(path):
+
+		"""
+			Loads time series data from a path of a particular subject. Format of filenames must include the year.
+
+			Parameters:
+				path (str): Location of subject folder
+			Returns:
+				(dict): key value pair of key = year , data = pose estimation
+
+		"""
 		filenames = os.listdir(path)
 
 		def get_year(filename):
@@ -395,6 +560,12 @@ class Vicon_Processor:
 
 	@staticmethod
 	def format_for_autoencoder(data,labels = False):
+		"""
+			Formats data for input into autoencoder.
+			
+			TODO: Figure out exactly what this data object is.
+
+		"""
 		X = []
 		Y = []
 		for key in data.keys():
@@ -411,7 +582,6 @@ class Vicon_Processor:
 				X[i][j] = MinMaxScaler().fit_transform(X[i][j].reshape(-1,1)).reshape(-1)
 
 		X = np.swapaxes(X,1,2)
-
 		res = (X,Y) if labels else X
 		return res
 
@@ -419,6 +589,13 @@ class Vicon_Processor:
 
 
 def detectron_test(args,filename):
+	"""
+		Gets 3d_poses from filename of detetcron 2d_pose (npy)
+
+		Parameters:
+			args (): arguments for needed for Processor models
+			filename: filename of npy file of detectron 2d poses
+	"""
 	processor = Processor(args)
 	pose_data = processor.pose_3d_from_detectron_npy(filename)
 	return pose_data
