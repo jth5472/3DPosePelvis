@@ -8,6 +8,13 @@ TODO: Summary of library.
 TODO: Dependencies, install instructions
 
 
+Build c++ library for post processing. See : https://github.com/ildoonet/tf-pose-estimation/tree/master/tf_pose/pafprocess
+```
+$ cd tf_pose/pafprocess
+$ swig -python -c++ pafprocess.i && python3 setup.py build_ext --inplace
+```
+
+
 ## DEMO
 
 TODO: Create a mini demo of either long term / present pelvis analysis
