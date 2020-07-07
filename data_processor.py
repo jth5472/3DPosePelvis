@@ -22,6 +22,17 @@ INT_TO_DIM = {
 
 
 class Subject:
+	"""
+		Stores relevant data for subject.
+
+		Fields:
+			uuid (int): subject identifier
+			parkinsons (bool): True if subject has parkinsons
+			pose_3d (np.array): shape => (frames (time),dimensions,joint ID)
+			date: Date of time sample from pose_3d. -1 if time is irrelevant.
+			group: depecriated. Ignore
+
+	"""
 	def __init__(self,id,parkinsons,pose_3d,date = -1,group = -1): 
 		self.uuid = id
 		self.parkinsons = parkinsons
@@ -30,6 +41,14 @@ class Subject:
 		self.group = group
 
 	def process_features(self,fp):
+		"""
+			Calculates all target features for subject.
+
+			Parameters: 
+				fp (FeatureProcessor): Specified FeatureProcessor to use with calculations
+			Returns:
+				(dictionary): Object containing subjects target features
+		"""
 		features = {}
 		pelvis_angles = fp.pelvis_angles(self.pose_3d)
 		pelvis_accelerations = fp.pelvis_accelerations(self.pose_3d)
@@ -46,14 +65,21 @@ class Subject:
 
 class FeatureProcessor:
 	def __init__(self):
+		"""
+			Holds the methods that calculate specific subject features.
+			Class should contain options relevant to calculations.
+		"""
 		pass
-
-
-
 
 	def pelvis_angles(self,pose_3d):
 		'''
-		@params: pose_3d data of shape => (frames,dimensions,joint ID)
+			Calculates max difference of X,Y,Z pelvis angles for 3d pose.
+
+			Parameters:
+				pose_3d (np.array): shape (frames (time),dimensions,joint ID)
+
+			Returns:
+				(list): [X,Y,Z] pelvis features
 		'''
 		pelvis_angles = {'time_series': [[] for _ in range(3)] , 'diff': [-1 for _ in range(3)]}
 		pelvis_joint_index = 0
@@ -88,6 +114,17 @@ class FeatureProcessor:
 
 
 	def pelvis_accelerations(self,pose_3d):
+		'''
+			Calculates the max difference of the pelvis accelerations for 3d pose.
+
+
+			Parameters:
+				pose_3d: (np.array): shape (frames (time),dimensions,joint ID)
+
+			Returns:
+				(list): [X,Y,Z] pelvis acceleration features
+		'''
+
 		pelvis_acceleration = {'time_series': [[None] for _ in range(3)] , 'diff': [-1 for _ in range(3)]}
 		for dim in range(3):
 			pelvis_positions =  np.asarray([x[dim][0] for x in pose_3d])
@@ -100,6 +137,15 @@ class FeatureProcessor:
 
 
 def get_subjects(split_subjects = False, frame_step = 35):
+	"""
+		Creates a subject object for all subjects located  in tf-pose-estimation/raw_data.
+		
+		Parameters:
+			split_subjects (bool): Indicates whether to split a full time series into multiple subjects
+			frame_step (int): If split_subjects = True, specificy the length needed for each signal to become its own subject.
+		Returns:
+			(dictionary): Object containing all of the calculated subjects
+	"""
 	parkinsons_string = 'parkinsons'
 	non_parkinsons_string = 'non_parkinsons'
 	folder_paths = ['processed_data/{}/'.format(non_parkinsons_string),'processed_data/{}/'.format(parkinsons_string)]
@@ -130,6 +176,14 @@ def get_subjects(split_subjects = False, frame_step = 35):
 
 
 def get_time_subjects(frame_step = 30):
+	"""
+		Creates a subject object containing their respecitive 3d_poses for each time period (see raw data at /tf-pose-estimation/time_data)
+
+		Parameters:
+			frame_step (int): Frame step indicates the length to split each raw 3d_pose time series into a new subject
+		Returns:
+			(dict): Object containing all of the subjects
+	"""
 	subjects = {}
 	for i,filename in enumerate(os.listdir(folder_path)):
 		if filename != ".DS_Store":
@@ -138,8 +192,6 @@ def get_time_subjects(frame_step = 30):
 			date_str = filename.split('.')[0]
 			date_str = date_str if not parkinsons else date_str[1:]
 			(m,d,y) = date_str.split(':')
-			if not parkinsons and int(y) < 2000:
-				continue
 			current_date = datetime.date.today()
 			filename_date = datetime.date(int(y),int(m),int(d))
 			delta = (filename_date - current_date).days
@@ -150,6 +202,16 @@ def get_time_subjects(frame_step = 30):
 	return subjects
 
 def graph_time_series(feature_data,avg = False):
+
+	"""
+		Plots line graphs of target features overtime for all subjecs in feature_data.
+
+		Parameters:
+			feature_data (dict): time feature object
+			avg (bool) = Takes the average of feature calculations for a specific time point if true else the median
+
+	"""
+
 	plot_data = {'parkinsons': 
 
 				{'Z_accelerations': [],
@@ -211,17 +273,18 @@ def graph_time_series(feature_data,avg = False):
 				plt.scatter(x,y, color = 'red' if class_key == 'parkinsons' else 'blue', s = 70)
 
 				if 'accelerations' not in key:
-					plt.ylabel("Degrees",fontsize = 21)
+					plt.ylabel("Degrees",fontsize = 23)
 				else:
-					plt.ylabel("Acceleration",fontsize = 21)
+					plt.ylabel("Acceleration",fontsize = 23)
 				if class_key == "parkinsons":
-					plt.title('Muhammad Ali', fontsize = 35)
+					plt.title('Muhammad Ali', fontsize = 32)
 				else:
-					plt.title("Vanna White",fontsize = 35)
+					plt.title("Vanna White",fontsize = 32)
 
-				plt.xlabel("Time",fontsize = 18)
-				plt.yticks(fontSize = 15)
-				plt.xticks(fontSize = 15)
+				plt.xlabel("Time",fontsize =25)
+				plt.tight_layout()
+				plt.yticks(fontSize = 18)
+				plt.xticks(fontSize = 18)
 				plt.locator_params(nbins=6)
 				plt.savefig("time_series/{}_{}.png".format(class_key,key))
 				plt.show()
@@ -229,6 +292,15 @@ def graph_time_series(feature_data,avg = False):
 
 
 def get_time_features(subjects):
+	"""
+		Stores long term feature trends from each subject into an object
+
+		Parameters:
+			subjects (dict): contains 3d_pose for each time period of all subjects
+		Returns:
+			(dict): features for each time period / subject 
+	"""
+
  fp = FeatureProcessor()
  features = {'parkinsons': {}, 'non_parkinsons': {},}
  for subject_key in subjects:
@@ -240,6 +312,14 @@ def get_time_features(subjects):
 
 
 def show_seperation(feature_data):
+	"""
+		Plots a visualization of the seperation between non-parkinsons and parkinsons target features.
+		
+		Parameters:
+			feature_data (dict): feature object
+		Returns: 
+			None
+	"""
 
 
 	for feature_key in feature_data:
@@ -264,6 +344,16 @@ def show_seperation(feature_data):
 			plt.show()
 
 def t_tests(feature_data,alpha = .05):
+	"""
+		Run t_tests for X,Y,Z dimensions of target features.
+
+		Parameters:
+			feature_data (dict): feature object
+		Returns:
+			None
+
+	"""
+
 	for feature_key in feature_data:
 			features = feature_data[feature_key]
 			for n in range(3):
@@ -279,6 +369,15 @@ def t_tests(feature_data,alpha = .05):
 
 
 def show_histograms(feature_data):
+	"""
+		Plot histogram distributions of feature data
+
+		Parameters:
+			feature_data (dictionary): feature object containing all subjects and their relevant features
+		Returns:
+			None
+	"""
+
 	for feature_key in feature_data:
 		features = feature_data[feature_key]
 		print("{}:".format(feature_key))
@@ -295,6 +394,17 @@ def show_histograms(feature_data):
 
 
 def get_features():
+	""""
+		Returns a dictionary of all target features associated with parkinsons vs non-parkinsons subjects
+
+		Parameters:
+			None
+		Returns:
+			(dict): feature object associated with subjects
+
+	"""
+
+
 	subjects = get_subjects(split_subjects = True)
 	pelvis_accelerations,pelvis_angles = {'parkinsons': [[] for _ in range(3)], 'non_parkinsons': [[] for _ in range(3)],} , {'parkinsons': [[] for _ in range(3)], 'non_parkinsons': [[] for _ in range(3)],} 
 	fp = FeatureProcessor()
@@ -313,6 +423,20 @@ def get_features():
 	}
 
 def grouped_bar_plot(feature_data,title_key,avg = True,barWidth = .25):
+
+	"""
+	Plots double X,Y,Z grouped bar plot for target feature.
+
+		Parameters:
+			feature_data (dict): contains all feature points for subjects of both classes (non-park vs park)
+			title_key (string): name of feature
+			avg (bool): take the median or avg for bar calculation
+			barWidth (float): width of each bar
+
+		Returns:
+			None
+	"""
+
 	plot_data = {}
 	for class_key in feature_data:
 		if avg:
@@ -320,6 +444,7 @@ def grouped_bar_plot(feature_data,title_key,avg = True,barWidth = .25):
 		else:
 			plot_data[class_key] = [np.median(feature_data[class_key][n]) for n in range(3)]
 
+	#r helps define spacing between bar plot entries
 	r = np.arange(3)
 	for i,key in enumerate(plot_data):
 		color = 'red' if i == 0 else 'blue'
@@ -331,6 +456,8 @@ def grouped_bar_plot(feature_data,title_key,avg = True,barWidth = .25):
 	
 	if title_key == "pelvis_angles":
 		plt.ylabel("Degrees",fontsize = 25)
+
+	#formatting settings for clear graph	
 	plt.title(title,fontsize = 25)
 	plt.xticks([x + barWidth for x in range(3)],["X","Y","Z"],fontSize = 15 )
 	plt.yticks(fontSize = 15)
@@ -342,6 +469,21 @@ def grouped_bar_plot(feature_data,title_key,avg = True,barWidth = .25):
 	
 
 def get_3d_poses(folder,output_folder):
+
+	'''
+		Takes all 2d_poses (npy) from input folder and stores them as 3d_poses in output_folder (npy).
+		
+		Parameters:
+			folder (str): Name of folder containing 2d_poses.
+			output_folder: Folder to store 3d_poses.
+
+		Returns: 
+			None
+
+		TODO: Currently overides all 3d_poses. Should check if already calculated 2d_poses to save processing time.
+		Maybe add an overide option too if thats not desired use case.
+
+	'''
 
 	parser = argparse.ArgumentParser(description='tf-pose-estimation run')
 	parser.add_argument('--image', type=str, default='./images/p1.jpg')
@@ -362,6 +504,14 @@ def get_3d_poses(folder,output_folder):
 
 
 def check_gap_amount(folder):
+	"""
+		Displays number of missed 2d_pose frames from detectron2 output.
+
+		Parameters:
+			folder (str): folder of 2d_posesx
+		Returns:
+			None.
+	"""
 	for filename in os.listdir(folder):
 		if filename!= ".DS_Store":
 			pose_2d = np.load(folder + filename,allow_pickle = True)[0]
@@ -374,6 +524,24 @@ def check_gap_amount(folder):
 			print('{}:{}'.format(filename,gap_counter))
 
 
+
+
+def plot_all_dims(data,title,color):
+	"""
+		Plots raw time series signal.
+
+		Parameters: 
+			data (list): 3 dimensional time series to plot
+			title: graph title
+			color: line color
+		Returns:
+			None
+	"""
+	fig, axes = plt.subplots(3)
+	fig.suptitle(title)
+	for i,dim_data in enumerate(data):
+		axes[i].plot(dim_data,color = color)
+	plt.show()
 	
 
 
@@ -390,14 +558,6 @@ def main():
 	
 	
 
-
-
-def plot_all_dims(data,title,color):
-	fig, axes = plt.subplots(3)
-	fig.suptitle(title)
-	for i,dim_data in enumerate(data):
-		axes[i].plot(dim_data,color = color)
-	plt.show()
 
 
 if __name__ == "__main__":
